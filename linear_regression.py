@@ -3,169 +3,193 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+
+# Import sklearn modules
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.metrics import mean_absolute_error
+from sklearn.metrics import mean_squared_error
+from sklearn.metrics import r2_score
 
-# Set page title
-st.set_page_config(page_title="Regression Project", layout="wide")
+# Page settings
+st.set_page_config(
+    page_title="Student Score Prediction",
+    page_icon="🎓",
+    layout="wide"
+)
 
-# App title
-st.title("🎓 Student Performance Regression Project")
+# Title
+st.title("🎓 Student Score Prediction")
+st.markdown("### Linear Regression Machine Learning Project")
 
-# Upload dataset
-file = st.file_uploader("Upload student-por.csv Dataset", type=["csv"])
+# Read dataset
+df = pd.read_csv("student-por.csv")
 
-# Run after upload
-if file is not None:
+# Remove duplicates
+df = df.drop_duplicates()
 
-    # Read dataset
-    df = pd.read_csv(file)
+# Store encoders
+encoders = {}
 
-    # Show dataset
-    st.subheader("Dataset")
-    st.dataframe(df.head())
+# Numerical columns
+num_cols = df.select_dtypes(include=np.number).columns
 
-    # Show dataset shape
-    st.write("Dataset Shape :", df.shape)
+# Categorical columns
+cat_cols = df.select_dtypes(include="object").columns
 
-    # Check missing values
-    st.subheader("Missing Values")
-    st.write(df.isnull().sum())
+# Fill missing numerical values
+num_imputer = SimpleImputer(strategy="mean")
+df[num_cols] = num_imputer.fit_transform(df[num_cols])
 
-    # Remove duplicate rows
-    df = df.drop_duplicates()
+# Fill missing categorical values
+cat_imputer = SimpleImputer(strategy="most_frequent")
+df[cat_cols] = cat_imputer.fit_transform(df[cat_cols])
 
-    # Separate numerical columns
-    num_cols = df.select_dtypes(include=np.number).columns
+# Encode categorical columns
+for col in cat_cols:
 
-    # Separate categorical columns
-    cat_cols = df.select_dtypes(include="object").columns
-
-    # Fill missing numerical values
-    num_imputer = SimpleImputer(strategy="mean")
-    df[num_cols] = num_imputer.fit_transform(df[num_cols])
-
-    # Fill missing categorical values
-    cat_imputer = SimpleImputer(strategy="most_frequent")
-    df[cat_cols] = cat_imputer.fit_transform(df[cat_cols])
-
-    # Encode categorical columns
+    # Create encoder
     le = LabelEncoder()
+
+    # Encode values
+    df[col] = le.fit_transform(df[col])
+
+    # Store encoder
+    encoders[col] = le
+
+# Features
+X = df.drop("G3", axis=1)
+
+# Target
+y = df["G3"]
+
+# Split dataset
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y,
+    test_size=0.2,
+    random_state=42
+)
+
+# Scale data
+scaler = StandardScaler()
+
+# Fit and transform train data
+X_train_scaled = scaler.fit_transform(X_train)
+
+# Transform test data
+X_test_scaled = scaler.transform(X_test)
+
+# Create model
+model = LinearRegression()
+
+# Train model
+model.fit(X_train_scaled, y_train)
+
+# Predict output
+y_pred = model.predict(X_test_scaled)
+
+# Metrics
+mae = mean_absolute_error(y_test, y_pred)
+mse = mean_squared_error(y_test, y_pred)
+rmse = np.sqrt(mse)
+r2 = r2_score(y_test, y_pred)
+
+# Show metrics
+st.subheader("📊 Model Performance")
+
+# Create columns
+c1, c2, c3, c4 = st.columns(4)
+
+# Show MAE
+c1.metric("MAE", round(mae, 2))
+
+# Show MSE
+c2.metric("MSE", round(mse, 2))
+
+# Show RMSE
+c3.metric("RMSE", round(rmse, 2))
+
+# Show R2 score
+c4.metric("R² Score", round(r2, 2))
+
+# Graph section
+st.subheader("📈 Actual vs Predicted Values")
+
+# Create figure
+fig, ax = plt.subplots(figsize=(8, 5))
+
+# Scatter plot
+ax.scatter(y_test, y_pred)
+
+# Labels
+ax.set_xlabel("Actual Scores")
+ax.set_ylabel("Predicted Scores")
+
+# Title
+ax.set_title("Linear Regression Prediction")
+
+# Show graph
+st.pyplot(fig)
+
+# Prediction section
+st.subheader("🎯 Predict Student Score")
+
+# Store user input
+user_input = {}
+
+# Create columns layout
+col1, col2 = st.columns(2)
+
+# Numerical inputs
+with col1:
+
+    # Loop numerical columns
+    for col in num_cols:
+
+        # Skip target column
+        if col != "G3":
+
+            # Create slider
+            user_input[col] = st.slider(
+                f"{col}",
+                float(df[col].min()),
+                float(df[col].max()),
+                float(df[col].mean())
+            )
+
+# Categorical inputs
+with col2:
+
+    # Loop categorical columns
     for col in cat_cols:
-        df[col] = le.fit_transform(df[col])
 
-    # Show cleaned dataset
-    st.subheader("Cleaned Dataset")
-    st.dataframe(df.head())
+        # Get original labels
+        options = list(encoders[col].classes_)
 
-    # Select target column
-    target = st.selectbox("Select Target Column", df.columns, index=len(df.columns)-1)
+        # Create selectbox
+        selected = st.selectbox(f"{col}", options)
 
-    # Create features and target
-    X = df.drop(target, axis=1)
-    y = df[target]
+        # Encode selected value
+        user_input[col] = encoders[col].transform([selected])[0]
 
-    # Split dataset
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
-    )
+# Predict button
+if st.button("Predict Score"):
 
-    # Scale feature values
-    scaler = StandardScaler()
-    X_train = scaler.fit_transform(X_train)
-    X_test = scaler.transform(X_test)
+    # Convert to dataframe
+    input_df = pd.DataFrame([user_input])
 
-    # Create regression model
-    model = LinearRegression()
+    # Arrange columns correctly
+    input_df = input_df[X.columns]
 
-    # Train model
-    model.fit(X_train, y_train)
+    # Scale input
+    input_scaled = scaler.transform(input_df)
 
-    # Predict test data
-    y_pred = model.predict(X_test)
+    # Predict
+    prediction = model.predict(input_scaled)
 
-    # Calculate MAE
-    mae = mean_absolute_error(y_test, y_pred)
-
-    # Calculate MSE
-    mse = mean_squared_error(y_test, y_pred)
-
-    # Calculate RMSE
-    rmse = np.sqrt(mse)
-
-    # Calculate R2 Score
-    r2 = r2_score(y_test, y_pred)
-
-    # Show model metrics
-    st.subheader("Model Performance")
-
-    # Create columns
-    c1, c2, c3, c4 = st.columns(4)
-
-    # Show MAE
-    c1.metric("MAE", round(mae, 2))
-
-    # Show MSE
-    c2.metric("MSE", round(mse, 2))
-
-    # Show RMSE
-    c3.metric("RMSE", round(rmse, 2))
-
-    # Show R2 Score
-    c4.metric("R2 Score", round(r2, 2))
-
-    # Plot actual vs predicted
-    st.subheader("Actual vs Predicted")
-
-    # Create figure
-    fig, ax = plt.subplots()
-
-    # Scatter plot
-    ax.scatter(y_test, y_pred)
-
-    # Set labels
-    ax.set_xlabel("Actual Values")
-    ax.set_ylabel("Predicted Values")
-
-    # Set title
-    ax.set_title("Regression Plot")
-
-    # Show plot
-    st.pyplot(fig)
-
-    # Prediction section
-    st.subheader("Predict Student Score")
-
-    # Store inputs
-    user_input = {}
-
-    # Create input fields
-    for col in X.columns:
-        user_input[col] = st.number_input(
-            f"Enter {col}",
-            value=float(df[col].mean())
-        )
-
-    # Predict button
-    if st.button("Predict"):
-
-        # Convert into dataframe
-        input_df = pd.DataFrame([user_input])
-
-        # Scale input
-        input_scaled = scaler.transform(input_df)
-
-        # Predict value
-        prediction = model.predict(input_scaled)
-
-        # Show prediction
-        st.success(f"Predicted {target} : {round(prediction[0], 2)}")
-
-# Message before upload
-else:
-
-    # Show info
-    st.info("Please upload the dataset")
+    # Show result
+    st.success(f"🎯 Predicted Student Score : {round(prediction[0], 2)}")
